@@ -1,9 +1,12 @@
+import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ArrowRight } from "lucide-react";
 import heroBackground from "@/assets/hero-background.jpg";
 
 const Hero = () => {
+  const navigate = useNavigate();
+  
   return (
     <section className="relative min-h-screen flex items-center justify-center overflow-hidden">
       <div 
@@ -30,14 +33,22 @@ const Hero = () => {
         </p>
         
         <div className="flex flex-col sm:flex-row gap-4 justify-center items-center max-w-2xl mx-auto">
-          <Button size="lg" className="text-base px-8 py-6 shadow-lg hover:shadow-xl transition-all">
+          <Button 
+            size="lg" 
+            className="text-base px-8 py-6 shadow-lg hover:shadow-xl transition-all"
+            onClick={() => navigate("/auth")}
+          >
             Get Started Free
             <ArrowRight className="ml-2 h-5 w-5" />
           </Button>
-          <Input 
-            placeholder="Search for projects or talent..." 
-            className="bg-background/95 backdrop-blur border-white/20 h-12 text-base px-6"
-          />
+          <Button 
+            size="lg" 
+            variant="secondary"
+            className="text-base px-8 py-6"
+            onClick={() => navigate("/find-work")}
+          >
+            Browse Jobs
+          </Button>
         </div>
       </div>
     </section>
