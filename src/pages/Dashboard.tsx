@@ -150,12 +150,24 @@ const Dashboard = () => {
 
   const handleUpdateApplicationStatus = async (applicationId: string, newStatus: string) => {
     try {
+      const application = applications.find(app => app.id === applicationId);
+      if (!application) return;
+
       const { error } = await supabase
         .from("job_applications")
         .update({ status: newStatus })
         .eq("id", applicationId);
 
       if (error) throw error;
+
+      // Create notification for the freelancer
+      await supabase.from("notifications").insert({
+        user_id: application.freelancer_id,
+        title: `Application ${newStatus}`,
+        message: `Your application for "${application.jobs.title}" has been ${newStatus}.`,
+        type: newStatus === "accepted" ? "success" : "error",
+        related_application_id: applicationId,
+      });
 
       setApplications(prev =>
         prev.map(app =>
