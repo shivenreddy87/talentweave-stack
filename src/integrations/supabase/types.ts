@@ -21,7 +21,9 @@ export type Database = {
           freelancer_id: string
           id: string
           job_id: string
+          phone_number: string | null
           proposed_rate: number | null
+          resume_url: string | null
           status: string
         }
         Insert: {
@@ -30,7 +32,9 @@ export type Database = {
           freelancer_id: string
           id?: string
           job_id: string
+          phone_number?: string | null
           proposed_rate?: number | null
+          resume_url?: string | null
           status?: string
         }
         Update: {
@@ -39,7 +43,9 @@ export type Database = {
           freelancer_id?: string
           id?: string
           job_id?: string
+          phone_number?: string | null
           proposed_rate?: number | null
+          resume_url?: string | null
           status?: string
         }
         Relationships: [

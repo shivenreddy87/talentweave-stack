@@ -4,8 +4,16 @@ import Header from "@/components/Header";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { MapPin, DollarSign, Clock, Briefcase } from "lucide-react";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
+import { MapPin, DollarSign, Clock, Briefcase, Upload } from "lucide-react";
 import { toast } from "sonner";
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import * as z from "zod";
+import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 
 interface Job {
   id: string;
@@ -22,19 +30,49 @@ interface Job {
 }
 
 interface Profile {
-  [key: string]: { full_name: string };
+  [key: string]: { full_name: string; email: string };
 }
+
+const applicationSchema = z.object({
+  name: z.string().min(2, "Name must be at least 2 characters"),
+  email: z.string().email("Invalid email address"),
+  phone: z.string().min(10, "Phone number must be at least 10 digits"),
+  coverLetter: z.string().min(20, "Cover letter must be at least 20 characters"),
+  proposedRate: z.number().min(0, "Rate must be a positive number").optional(),
+});
 
 const FindWork = () => {
   const [jobs, setJobs] = useState<Job[]>([]);
   const [profiles, setProfiles] = useState<Profile>({});
   const [loading, setLoading] = useState(true);
   const [user, setUser] = useState<any>(null);
+  const [selectedJobId, setSelectedJobId] = useState<string | null>(null);
+  const [dialogOpen, setDialogOpen] = useState(false);
+  const [resumeFile, setResumeFile] = useState<File | null>(null);
+  const [submitting, setSubmitting] = useState(false);
+
+  const form = useForm<z.infer<typeof applicationSchema>>({
+    resolver: zodResolver(applicationSchema),
+    defaultValues: {
+      name: "",
+      email: "",
+      phone: "",
+      coverLetter: "",
+      proposedRate: undefined,
+    },
+  });
 
   useEffect(() => {
     fetchJobs();
     fetchUser();
   }, []);
+
+  useEffect(() => {
+    if (user && profiles[user.id]) {
+      form.setValue("name", profiles[user.id].full_name || "");
+      form.setValue("email", profiles[user.id].email || user.email || "");
+    }
+  }, [user, profiles, form]);
 
   const fetchUser = async () => {
     const { data: { session } } = await supabase.auth.getSession();
@@ -56,10 +94,11 @@ const FindWork = () => {
         
         // Fetch profiles for all employers
         const employerIds = [...new Set(jobsData.map(job => job.employer_id))];
+        const allIds = user ? [...employerIds, user.id] : employerIds;
         const { data: profilesData } = await supabase
           .from("profiles")
-          .select("id, full_name")
-          .in("id", employerIds);
+          .select("id, full_name, email")
+          .in("id", allIds);
 
         if (profilesData) {
           const profilesMap = profilesData.reduce((acc, profile) => ({
@@ -81,7 +120,59 @@ const FindWork = () => {
       toast.error("Please sign in to apply for jobs");
       return;
     }
-    toast.info("Application feature coming soon!");
+    setSelectedJobId(jobId);
+    setDialogOpen(true);
+  };
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files && e.target.files[0]) {
+      setResumeFile(e.target.files[0]);
+    }
+  };
+
+  const onSubmit = async (values: z.infer<typeof applicationSchema>) => {
+    if (!user || !selectedJobId) return;
+    
+    setSubmitting(true);
+    try {
+      let resumeUrl = null;
+
+      // Upload resume if provided
+      if (resumeFile) {
+        const fileExt = resumeFile.name.split('.').pop();
+        const fileName = `${user.id}/${selectedJobId}_${Date.now()}.${fileExt}`;
+        
+        const { error: uploadError } = await supabase.storage
+          .from('resumes')
+          .upload(fileName, resumeFile);
+
+        if (uploadError) throw uploadError;
+        resumeUrl = fileName;
+      }
+
+      // Create application
+      const { error: insertError } = await supabase
+        .from('job_applications')
+        .insert({
+          job_id: selectedJobId,
+          freelancer_id: user.id,
+          cover_letter: values.coverLetter,
+          proposed_rate: values.proposedRate,
+          phone_number: values.phone,
+          resume_url: resumeUrl,
+        });
+
+      if (insertError) throw insertError;
+
+      toast.success("Application submitted successfully!");
+      setDialogOpen(false);
+      form.reset();
+      setResumeFile(null);
+    } catch (error: any) {
+      toast.error("Failed to submit application");
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   return (
@@ -158,6 +249,132 @@ const FindWork = () => {
           </div>
         )}
       </main>
+
+      <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Apply for Position</DialogTitle>
+            <DialogDescription>
+              Fill in your details to apply for this job
+            </DialogDescription>
+          </DialogHeader>
+
+          <Form {...form}>
+            <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+              <FormField
+                control={form.control}
+                name="name"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Full Name</FormLabel>
+                    <FormControl>
+                      <Input placeholder="John Doe" {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <FormField
+                control={form.control}
+                name="email"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Email</FormLabel>
+                    <FormControl>
+                      <Input type="email" placeholder="john@example.com" {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <FormField
+                control={form.control}
+                name="phone"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Phone Number</FormLabel>
+                    <FormControl>
+                      <Input type="tel" placeholder="+1234567890" {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <FormField
+                control={form.control}
+                name="proposedRate"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Proposed Rate ($/hr) - Optional</FormLabel>
+                    <FormControl>
+                      <Input 
+                        type="number" 
+                        placeholder="50" 
+                        {...field}
+                        onChange={(e) => field.onChange(e.target.value ? parseFloat(e.target.value) : undefined)}
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <FormField
+                control={form.control}
+                name="coverLetter"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Cover Letter</FormLabel>
+                    <FormControl>
+                      <Textarea 
+                        placeholder="Tell us why you're a great fit for this position..."
+                        className="min-h-[120px]"
+                        {...field}
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <div className="space-y-2">
+                <Label htmlFor="resume">Resume</Label>
+                <div className="flex items-center gap-2">
+                  <Input
+                    id="resume"
+                    type="file"
+                    accept=".pdf,.doc,.docx"
+                    onChange={handleFileChange}
+                  />
+                  {resumeFile && (
+                    <span className="text-sm text-muted-foreground flex items-center gap-1">
+                      <Upload className="h-4 w-4" />
+                      {resumeFile.name}
+                    </span>
+                  )}
+                </div>
+              </div>
+
+              <div className="flex justify-end gap-2 pt-4">
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => setDialogOpen(false)}
+                  disabled={submitting}
+                >
+                  Cancel
+                </Button>
+                <Button type="submit" disabled={submitting}>
+                  {submitting ? "Submitting..." : "Submit Application"}
+                </Button>
+              </div>
+            </form>
+          </Form>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };
