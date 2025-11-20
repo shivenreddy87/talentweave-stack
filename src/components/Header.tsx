@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Briefcase, Plus } from "lucide-react";
+import { Notifications } from "./Notifications";
 
 const Header = () => {
   const navigate = useNavigate();
@@ -58,6 +59,7 @@ const Header = () => {
           <div className="flex items-center gap-4">
             {user ? (
               <>
+                <Notifications />
                 <Button onClick={() => navigate("/dashboard")}>
                   Dashboard
                 </Button>
