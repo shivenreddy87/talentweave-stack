@@ -39,6 +39,14 @@ const Header = () => {
             >
               Find Work
             </button>
+            {user && (
+              <button 
+                onClick={() => navigate("/my-applications")} 
+                className="text-foreground hover:text-primary transition-colors"
+              >
+                My Applications
+              </button>
+            )}
             <button 
               onClick={() => navigate("/dashboard")} 
               className="text-foreground hover:text-primary transition-colors"
