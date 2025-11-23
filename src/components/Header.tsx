@@ -4,6 +4,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Briefcase, Plus } from "lucide-react";
 import { Notifications } from "./Notifications";
+import MobileMenu from "./MobileMenu";
 
 const Header = () => {
   const navigate = useNavigate();
@@ -40,6 +41,12 @@ const Header = () => {
             >
               Find Work
             </button>
+            <button 
+              onClick={() => navigate("/browse-talent")} 
+              className="text-foreground hover:text-primary transition-colors"
+            >
+              Browse Talent
+            </button>
             {user && (
               <button 
                 onClick={() => navigate("/my-applications")} 
@@ -60,24 +67,27 @@ const Header = () => {
             {user ? (
               <>
                 <Notifications />
-                <Button onClick={() => navigate("/dashboard")}>
-                  Dashboard
-                </Button>
-                <Button onClick={() => navigate("/post-job")}>
-                  <Plus className="h-4 w-4 mr-2" />
-                  Post Job
-                </Button>
+                <div className="hidden md:flex items-center gap-2">
+                  <Button onClick={() => navigate("/dashboard")}>
+                    Dashboard
+                  </Button>
+                  <Button onClick={() => navigate("/post-job")}>
+                    <Plus className="h-4 w-4 mr-2" />
+                    Post Job
+                  </Button>
+                </div>
               </>
             ) : (
-              <>
+              <div className="hidden md:flex items-center gap-2">
                 <Button variant="ghost" onClick={() => navigate("/auth")}>
                   Sign In
                 </Button>
                 <Button onClick={() => navigate("/auth")}>
                   Get Started
                 </Button>
-              </>
+              </div>
             )}
+            <MobileMenu user={user} />
           </div>
         </div>
       </div>

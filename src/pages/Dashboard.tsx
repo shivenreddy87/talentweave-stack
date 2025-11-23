@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import Header from "@/components/Header";
+import Footer from "@/components/Footer";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
@@ -203,9 +204,9 @@ const Dashboard = () => {
   }
 
   return (
-    <div className="min-h-screen bg-background">
+    <div className="min-h-screen bg-background flex flex-col">
       <Header />
-      <main className="container mx-auto px-6 py-24">
+      <main className="flex-1 container mx-auto px-6 py-24">
         <div className="max-w-6xl mx-auto space-y-8">
           <Card>
             <CardHeader>
@@ -221,9 +222,14 @@ const Dashboard = () => {
                     <CardDescription>{user?.email}</CardDescription>
                   </div>
                 </div>
-                <Button variant="outline" onClick={handleSignOut}>
-                  Sign Out
-                </Button>
+                <div className="flex gap-2">
+                  <Button variant="outline" onClick={() => navigate("/profile")}>
+                    Edit Profile
+                  </Button>
+                  <Button variant="outline" onClick={handleSignOut}>
+                    Sign Out
+                  </Button>
+                </div>
               </div>
             </CardHeader>
             <CardContent>
@@ -406,6 +412,7 @@ const Dashboard = () => {
           </Tabs>
         </div>
       </main>
+      <Footer />
     </div>
   );
 };
