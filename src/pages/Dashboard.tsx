@@ -170,9 +170,6 @@ const Dashboard = () => {
         related_application_id: applicationId,
       });
 
-      if (notificationError) {
-        console.error("Failed to create notification:", notificationError);
-      }
 
       // Update local state
       setApplications(prev =>
@@ -183,20 +180,20 @@ const Dashboard = () => {
 
       toast.success(`Application ${newStatus} successfully`);
     } catch (error: any) {
-      console.error("Error updating application:", error);
       toast.error("Failed to update application");
     }
   };
 
   const handleDownloadResume = async (resumeUrl: string) => {
     try {
-      const { data } = supabase.storage
+      const { data, error } = await supabase.storage
         .from('resumes')
-        .getPublicUrl(resumeUrl);
+        .createSignedUrl(resumeUrl, 60);
       
-      window.open(data.publicUrl, "_blank");
+      if (error) throw error;
+      
+      window.open(data.signedUrl, "_blank");
     } catch (error: any) {
-      console.error("Error opening resume:", error);
       toast.error("Failed to open resume");
     }
   };
