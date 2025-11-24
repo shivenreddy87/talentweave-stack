@@ -66,7 +66,6 @@ export const Notifications = () => {
       .limit(20);
 
     if (error) {
-      console.error("Error fetching notifications:", error);
       return;
     }
 
@@ -81,7 +80,6 @@ export const Notifications = () => {
       .eq("id", notificationId);
 
     if (error) {
-      console.error("Error marking notification as read:", error);
       return;
     }
 
@@ -102,7 +100,6 @@ export const Notifications = () => {
       .eq("read", false);
 
     if (error) {
-      console.error("Error marking all as read:", error);
       return;
     }
 

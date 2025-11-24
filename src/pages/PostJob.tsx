@@ -1,5 +1,8 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { z } from "zod";
 import { supabase } from "@/integrations/supabase/client";
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
@@ -9,22 +12,45 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { toast } from "sonner";
+
+const jobSchema = z.object({
+  title: z.string().trim().min(5, "Title must be at least 5 characters").max(200, "Title must be less than 200 characters"),
+  description: z.string().trim().min(20, "Description must be at least 20 characters").max(5000, "Description must be less than 5000 characters"),
+  budget_min: z.string().optional().refine((val) => !val || !isNaN(parseFloat(val)) && parseFloat(val) > 0, "Must be a positive number"),
+  budget_max: z.string().optional().refine((val) => !val || !isNaN(parseFloat(val)) && parseFloat(val) > 0, "Must be a positive number"),
+  location: z.string().max(200, "Location must be less than 200 characters").optional(),
+  job_type: z.string().optional(),
+  experience_level: z.string().optional(),
+  skills: z.string().max(1000, "Skills list is too long").optional(),
+}).refine((data) => {
+  if (data.budget_min && data.budget_max) {
+    return parseFloat(data.budget_max) >= parseFloat(data.budget_min);
+  }
+  return true;
+}, {
+  message: "Maximum budget must be greater than minimum budget",
+  path: ["budget_max"],
+});
 
 const PostJob = () => {
   const navigate = useNavigate();
   const [loading, setLoading] = useState(false);
   const [user, setUser] = useState<any>(null);
   
-  const [formData, setFormData] = useState({
-    title: "",
-    description: "",
-    budget_min: "",
-    budget_max: "",
-    location: "",
-    job_type: "",
-    experience_level: "",
-    skills: "",
+  const form = useForm<z.infer<typeof jobSchema>>({
+    resolver: zodResolver(jobSchema),
+    defaultValues: {
+      title: "",
+      description: "",
+      budget_min: "",
+      budget_max: "",
+      location: "",
+      job_type: "",
+      experience_level: "",
+      skills: "",
+    },
   });
 
   useEffect(() => {
@@ -41,22 +67,21 @@ const PostJob = () => {
     setUser(session.user);
   };
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleSubmit = async (values: z.infer<typeof jobSchema>) => {
     if (!user) return;
 
     setLoading(true);
     try {
       const { error } = await supabase.from("jobs").insert({
         employer_id: user.id,
-        title: formData.title,
-        description: formData.description,
-        budget_min: parseFloat(formData.budget_min) || null,
-        budget_max: parseFloat(formData.budget_max) || null,
-        location: formData.location || null,
-        job_type: formData.job_type || null,
-        experience_level: formData.experience_level || null,
-        skills_required: formData.skills ? formData.skills.split(",").map(s => s.trim()) : [],
+        title: values.title,
+        description: values.description,
+        budget_min: values.budget_min ? parseFloat(values.budget_min) : null,
+        budget_max: values.budget_max ? parseFloat(values.budget_max) : null,
+        location: values.location || null,
+        job_type: values.job_type || null,
+        experience_level: values.experience_level || null,
+        skills_required: values.skills ? values.skills.split(",").map(s => s.trim()).filter(s => s) : [],
         status: "open"
       });
 
@@ -65,14 +90,10 @@ const PostJob = () => {
       toast.success("Job posted successfully!");
       navigate("/find-work");
     } catch (error: any) {
-      toast.error(error.message);
+      toast.error("Failed to post job. Please try again.");
     } finally {
       setLoading(false);
     }
-  };
-
-  const handleChange = (field: string, value: string) => {
-    setFormData(prev => ({ ...prev, [field]: value }));
   };
 
   return (
@@ -85,108 +106,151 @@ const PostJob = () => {
             <CardDescription>Fill in the details about your project or job opening</CardDescription>
           </CardHeader>
           <CardContent>
-            <form onSubmit={handleSubmit} className="space-y-6">
-              <div className="space-y-2">
-                <Label htmlFor="title">Job Title *</Label>
-                <Input
-                  id="title"
-                  placeholder="e.g. Full Stack Developer"
-                  value={formData.title}
-                  onChange={(e) => handleChange("title", e.target.value)}
-                  required
+            <Form {...form}>
+              <form onSubmit={form.handleSubmit(handleSubmit)} className="space-y-6">
+                <FormField
+                  control={form.control}
+                  name="title"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Job Title *</FormLabel>
+                      <FormControl>
+                        <Input placeholder="e.g. Full Stack Developer" {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
                 />
-              </div>
 
-              <div className="space-y-2">
-                <Label htmlFor="description">Description *</Label>
-                <Textarea
-                  id="description"
-                  placeholder="Describe the job requirements, responsibilities, and expectations..."
-                  value={formData.description}
-                  onChange={(e) => handleChange("description", e.target.value)}
-                  rows={6}
-                  required
+                <FormField
+                  control={form.control}
+                  name="description"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Description *</FormLabel>
+                      <FormControl>
+                        <Textarea
+                          placeholder="Describe the job requirements, responsibilities, and expectations..."
+                          rows={6}
+                          {...field}
+                        />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
                 />
-              </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label htmlFor="budget_min">Min Budget ($)</Label>
-                  <Input
-                    id="budget_min"
-                    type="number"
-                    placeholder="1000"
-                    value={formData.budget_min}
-                    onChange={(e) => handleChange("budget_min", e.target.value)}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <FormField
+                    control={form.control}
+                    name="budget_min"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Min Budget ($)</FormLabel>
+                        <FormControl>
+                          <Input type="number" placeholder="1000" {...field} />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  <FormField
+                    control={form.control}
+                    name="budget_max"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Max Budget ($)</FormLabel>
+                        <FormControl>
+                          <Input type="number" placeholder="5000" {...field} />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
                   />
                 </div>
-                <div className="space-y-2">
-                  <Label htmlFor="budget_max">Max Budget ($)</Label>
-                  <Input
-                    id="budget_max"
-                    type="number"
-                    placeholder="5000"
-                    value={formData.budget_max}
-                    onChange={(e) => handleChange("budget_max", e.target.value)}
+
+                <FormField
+                  control={form.control}
+                  name="location"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Location</FormLabel>
+                      <FormControl>
+                        <Input placeholder="Remote, New York, etc." {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <FormField
+                    control={form.control}
+                    name="job_type"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Job Type</FormLabel>
+                        <Select onValueChange={field.onChange} value={field.value}>
+                          <FormControl>
+                            <SelectTrigger>
+                              <SelectValue placeholder="Select type" />
+                            </SelectTrigger>
+                          </FormControl>
+                          <SelectContent>
+                            <SelectItem value="full-time">Full Time</SelectItem>
+                            <SelectItem value="part-time">Part Time</SelectItem>
+                            <SelectItem value="contract">Contract</SelectItem>
+                            <SelectItem value="freelance">Freelance</SelectItem>
+                          </SelectContent>
+                        </Select>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+
+                  <FormField
+                    control={form.control}
+                    name="experience_level"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Experience Level</FormLabel>
+                        <Select onValueChange={field.onChange} value={field.value}>
+                          <FormControl>
+                            <SelectTrigger>
+                              <SelectValue placeholder="Select level" />
+                            </SelectTrigger>
+                          </FormControl>
+                          <SelectContent>
+                            <SelectItem value="entry">Entry Level</SelectItem>
+                            <SelectItem value="intermediate">Intermediate</SelectItem>
+                            <SelectItem value="expert">Expert</SelectItem>
+                          </SelectContent>
+                        </Select>
+                        <FormMessage />
+                      </FormItem>
+                    )}
                   />
                 </div>
-              </div>
 
-              <div className="space-y-2">
-                <Label htmlFor="location">Location</Label>
-                <Input
-                  id="location"
-                  placeholder="Remote, New York, etc."
-                  value={formData.location}
-                  onChange={(e) => handleChange("location", e.target.value)}
+                <FormField
+                  control={form.control}
+                  name="skills"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Required Skills (comma separated)</FormLabel>
+                      <FormControl>
+                        <Input placeholder="React, TypeScript, Node.js" {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
                 />
-              </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label htmlFor="job_type">Job Type</Label>
-                  <Select value={formData.job_type} onValueChange={(value) => handleChange("job_type", value)}>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Select type" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="full-time">Full Time</SelectItem>
-                      <SelectItem value="part-time">Part Time</SelectItem>
-                      <SelectItem value="contract">Contract</SelectItem>
-                      <SelectItem value="freelance">Freelance</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                <div className="space-y-2">
-                  <Label htmlFor="experience_level">Experience Level</Label>
-                  <Select value={formData.experience_level} onValueChange={(value) => handleChange("experience_level", value)}>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Select level" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="entry">Entry Level</SelectItem>
-                      <SelectItem value="intermediate">Intermediate</SelectItem>
-                      <SelectItem value="expert">Expert</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="skills">Required Skills (comma separated)</Label>
-                <Input
-                  id="skills"
-                  placeholder="React, TypeScript, Node.js"
-                  value={formData.skills}
-                  onChange={(e) => handleChange("skills", e.target.value)}
-                />
-              </div>
-
-              <Button type="submit" className="w-full" disabled={loading}>
-                {loading ? "Posting..." : "Post Job"}
-              </Button>
-            </form>
+                <Button type="submit" className="w-full" disabled={loading}>
+                  {loading ? "Posting..." : "Post Job"}
+                </Button>
+              </form>
+            </Form>
           </CardContent>
         </Card>
       </main>
