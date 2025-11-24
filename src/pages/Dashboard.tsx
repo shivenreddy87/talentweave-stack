@@ -154,15 +154,15 @@ const Dashboard = () => {
       const application = applications.find(app => app.id === applicationId);
       if (!application) return;
 
-      const { error } = await supabase
+      const { error: updateError } = await supabase
         .from("job_applications")
         .update({ status: newStatus })
         .eq("id", applicationId);
 
-      if (error) throw error;
+      if (updateError) throw updateError;
 
       // Create notification for the freelancer
-      await supabase.from("notifications").insert({
+      const { error: notificationError } = await supabase.from("notifications").insert({
         user_id: application.freelancer_id,
         title: `Application ${newStatus}`,
         message: `Your application for "${application.jobs.title}" has been ${newStatus}.`,
@@ -170,20 +170,35 @@ const Dashboard = () => {
         related_application_id: applicationId,
       });
 
+      if (notificationError) {
+        console.error("Failed to create notification:", notificationError);
+      }
+
+      // Update local state
       setApplications(prev =>
         prev.map(app =>
           app.id === applicationId ? { ...app, status: newStatus } : app
         )
       );
 
-      toast.success(`Application ${newStatus}`);
+      toast.success(`Application ${newStatus} successfully`);
     } catch (error: any) {
+      console.error("Error updating application:", error);
       toast.error("Failed to update application");
     }
   };
 
   const handleDownloadResume = async (resumeUrl: string) => {
-    window.open(resumeUrl, "_blank");
+    try {
+      const { data } = supabase.storage
+        .from('resumes')
+        .getPublicUrl(resumeUrl);
+      
+      window.open(data.publicUrl, "_blank");
+    } catch (error: any) {
+      console.error("Error opening resume:", error);
+      toast.error("Failed to open resume");
+    }
   };
 
   const handleSignOut = async () => {
