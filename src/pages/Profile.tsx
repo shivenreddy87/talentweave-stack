@@ -62,7 +62,8 @@ const Profile = () => {
         });
       }
     } catch (error: any) {
-      console.error("Error fetching profile:", error);
+      if (import.meta.env.DEV) console.error("Error fetching profile:", error);
+      toast.error("Unable to load profile data");
     }
   };
 
