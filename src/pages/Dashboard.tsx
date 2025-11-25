@@ -77,7 +77,8 @@ const Dashboard = () => {
       if (error) throw error;
       setProfile(data);
     } catch (error: any) {
-      console.error("Error fetching profile:", error);
+      if (import.meta.env.DEV) console.error("Error fetching profile:", error);
+      toast.error("Unable to load profile data");
     }
   };
 
@@ -92,7 +93,8 @@ const Dashboard = () => {
       if (error) throw error;
       setJobs(data || []);
     } catch (error: any) {
-      console.error("Error fetching jobs:", error);
+      if (import.meta.env.DEV) console.error("Error fetching jobs:", error);
+      toast.error("Unable to load jobs");
     }
   };
 

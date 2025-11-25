@@ -147,7 +147,7 @@ const FindWork = () => {
         }
       }
     } catch (error: any) {
-      console.error("Error fetching jobs:", error);
+      if (import.meta.env.DEV) console.error("Error fetching jobs:", error);
       toast.error("Failed to load jobs");
     } finally {
       setLoading(false);
