@@ -163,6 +163,16 @@ const Dashboard = () => {
 
       if (updateError) throw updateError;
 
+      // If accepting, update job status to 'in_progress' so it's removed from Find Work
+      if (newStatus === "accepted") {
+        const { error: jobUpdateError } = await supabase
+          .from("jobs")
+          .update({ status: "in_progress" })
+          .eq("id", application.job_id);
+
+        if (jobUpdateError) throw jobUpdateError;
+      }
+
       // Create notification for the freelancer
       const { error: notificationError } = await supabase.from("notifications").insert({
         user_id: application.freelancer_id,
