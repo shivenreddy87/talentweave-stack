@@ -197,7 +197,7 @@ const FindWork = () => {
 
       if (resumeFile) {
         const fileExt = resumeFile.name.split(".").pop();
-        const fileName = `${user.id}-${Date.now()}.${fileExt}`;
+        const fileName = `${user.id}/resume-${Date.now()}.${fileExt}`;
         const { error: uploadError, data } = await supabase.storage
           .from("resumes")
           .upload(fileName, resumeFile);
