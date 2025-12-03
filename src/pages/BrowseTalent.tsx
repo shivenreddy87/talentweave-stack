@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
+import ContactFreelancerDialog from "@/components/ContactFreelancerDialog";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -25,10 +26,37 @@ const BrowseTalent = () => {
   const [filteredProfiles, setFilteredProfiles] = useState<FreelancerProfile[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
+  const [currentUser, setCurrentUser] = useState<{ name: string; email: string } | null>(null);
+  const [contactDialogOpen, setContactDialogOpen] = useState(false);
+  const [selectedFreelancer, setSelectedFreelancer] = useState<FreelancerProfile | null>(null);
 
   useEffect(() => {
     fetchProfiles();
+    fetchCurrentUser();
   }, []);
+
+  const fetchCurrentUser = async () => {
+    const { data: { session } } = await supabase.auth.getSession();
+    if (session?.user) {
+      const { data: profile } = await supabase
+        .from("profiles")
+        .select("full_name, email")
+        .eq("id", session.user.id)
+        .single();
+      
+      if (profile) {
+        setCurrentUser({
+          name: profile.full_name || "A FreelancerWorks User",
+          email: profile.email,
+        });
+      }
+    }
+  };
+
+  const handleContactClick = (profile: FreelancerProfile) => {
+    setSelectedFreelancer(profile);
+    setContactDialogOpen(true);
+  };
 
   useEffect(() => {
     filterProfiles();
@@ -63,7 +91,7 @@ const BrowseTalent = () => {
       setProfiles(data || []);
       setFilteredProfiles(data || []);
     } catch (error: any) {
-      console.error("Error fetching profiles:", error);
+      if (import.meta.env.DEV) console.error("Error fetching profiles:", error);
       toast.error("Failed to load freelancers");
     } finally {
       setLoading(false);
@@ -193,7 +221,7 @@ const BrowseTalent = () => {
                       </div>
                     )}
 
-                    <Button className="w-full">Contact</Button>
+                    <Button className="w-full" onClick={() => handleContactClick(profile)}>Contact</Button>
                   </CardContent>
                 </Card>
               ))}
@@ -202,6 +230,16 @@ const BrowseTalent = () => {
         </div>
       </main>
       <Footer />
+
+      {selectedFreelancer && (
+        <ContactFreelancerDialog
+          open={contactDialogOpen}
+          onOpenChange={setContactDialogOpen}
+          freelancer={selectedFreelancer}
+          senderName={currentUser?.name}
+          senderEmail={currentUser?.email}
+        />
+      )}
     </div>
   );
 };
