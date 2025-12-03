@@ -147,7 +147,7 @@ const Dashboard = () => {
 
       setApplications(applicationsWithDetails);
     } catch (error: any) {
-      console.error("Error fetching applications:", error);
+      if (import.meta.env.DEV) console.error("Error fetching applications:", error);
     }
   };
 
@@ -182,6 +182,21 @@ const Dashboard = () => {
         related_application_id: applicationId,
       });
 
+      // Send email notification to freelancer
+      try {
+        await supabase.functions.invoke("send-application-email", {
+          body: {
+            freelancerEmail: application.profiles.email,
+            freelancerName: application.profiles.full_name || "Freelancer",
+            jobTitle: application.jobs.title,
+            status: newStatus,
+            employerName: profile?.full_name,
+          },
+        });
+      } catch (emailError) {
+        if (import.meta.env.DEV) console.error("Email notification failed:", emailError);
+        // Don't block the main flow if email fails
+      }
 
       // Update local state
       setApplications(prev =>
