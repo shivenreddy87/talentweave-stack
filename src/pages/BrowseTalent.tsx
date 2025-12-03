@@ -26,30 +26,35 @@ const BrowseTalent = () => {
   const [filteredProfiles, setFilteredProfiles] = useState<FreelancerProfile[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
-  const [currentUser, setCurrentUser] = useState<{ name: string; email: string } | null>(null);
+  const [currentUser, setCurrentUser] = useState<{ id: string; name: string; email: string } | null>(null);
   const [contactDialogOpen, setContactDialogOpen] = useState(false);
   const [selectedFreelancer, setSelectedFreelancer] = useState<FreelancerProfile | null>(null);
+  const [currentUserId, setCurrentUserId] = useState<string | null>(null);
 
   useEffect(() => {
-    fetchProfiles();
-    fetchCurrentUser();
+    const init = async () => {
+      const { data: { session } } = await supabase.auth.getSession();
+      const userId = session?.user?.id || null;
+      setCurrentUserId(userId);
+      fetchProfiles(userId);
+      if (userId) fetchCurrentUser(userId);
+    };
+    init();
   }, []);
 
-  const fetchCurrentUser = async () => {
-    const { data: { session } } = await supabase.auth.getSession();
-    if (session?.user) {
-      const { data: profile } = await supabase
-        .from("profiles")
-        .select("full_name, email")
-        .eq("id", session.user.id)
-        .single();
-      
-      if (profile) {
-        setCurrentUser({
-          name: profile.full_name || "A FreelancerWorks User",
-          email: profile.email,
-        });
-      }
+  const fetchCurrentUser = async (userId: string) => {
+    const { data: profile } = await supabase
+      .from("profiles")
+      .select("full_name, email")
+      .eq("id", userId)
+      .single();
+    
+    if (profile) {
+      setCurrentUser({
+        id: userId,
+        name: profile.full_name || "A FreelancerWorks User",
+        email: profile.email,
+      });
     }
   };
 
@@ -62,7 +67,7 @@ const BrowseTalent = () => {
     filterProfiles();
   }, [searchTerm, profiles]);
 
-  const fetchProfiles = async () => {
+  const fetchProfiles = async (currentUserId: string | null) => {
     try {
       // Get all user roles to find freelancers
       const { data: freelancerRoles, error: rolesError } = await supabase
@@ -79,7 +84,17 @@ const BrowseTalent = () => {
         return;
       }
 
-      const freelancerIds = freelancerRoles.map(r => r.user_id);
+      // Exclude current user from freelancer list
+      const freelancerIds = freelancerRoles
+        .map(r => r.user_id)
+        .filter(id => id !== currentUserId);
+
+      if (freelancerIds.length === 0) {
+        setProfiles([]);
+        setFilteredProfiles([]);
+        setLoading(false);
+        return;
+      }
 
       const { data, error } = await supabase
         .from("profiles")
