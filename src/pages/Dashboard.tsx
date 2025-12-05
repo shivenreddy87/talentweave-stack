@@ -6,10 +6,11 @@ import Footer from "@/components/Footer";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
-import { Badge } from "@/components/ui/badge";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Briefcase, MapPin, Calendar, FileText, Download } from "lucide-react";
+import { MapPin } from "lucide-react";
 import { toast } from "sonner";
+import JobsList from "@/components/dashboard/JobsList";
+import ApplicationsTabs, { Application } from "@/components/dashboard/ApplicationsTabs";
+import ApplicationDetails from "@/components/dashboard/ApplicationDetails";
 
 interface Job {
   id: string;
@@ -17,26 +18,14 @@ interface Job {
   description: string;
   status: string;
   created_at: string;
-  location: string;
+  location: string | null;
+  applicationCount?: number;
 }
 
-interface Application {
-  id: string;
-  job_id: string;
-  freelancer_id: string;
-  status: string;
-  created_at: string;
-  proposed_rate: number | null;
-  cover_letter: string;
-  phone_number: string | null;
-  resume_url: string | null;
-  profiles: {
-    full_name: string | null;
-    email: string;
-  };
-  jobs: {
-    title: string;
-  };
+interface InterviewData {
+  date: string;
+  time: string;
+  notes: string;
 }
 
 const Dashboard = () => {
@@ -46,6 +35,11 @@ const Dashboard = () => {
   const [jobs, setJobs] = useState<Job[]>([]);
   const [applications, setApplications] = useState<Application[]>([]);
   const [loading, setLoading] = useState(true);
+  
+  // Navigation state
+  const [selectedJob, setSelectedJob] = useState<Job | null>(null);
+  const [selectedApplication, setSelectedApplication] = useState<Application | null>(null);
+  const [jobApplications, setJobApplications] = useState<Application[]>([]);
 
   useEffect(() => {
     checkAuth();
@@ -61,8 +55,7 @@ const Dashboard = () => {
 
     setUser(session.user);
     await fetchProfile(session.user.id);
-    await fetchJobs(session.user.id);
-    await fetchApplications(session.user.id);
+    await fetchJobsWithCounts(session.user.id);
     setLoading(false);
   };
 
@@ -82,52 +75,52 @@ const Dashboard = () => {
     }
   };
 
-  const fetchJobs = async (userId: string) => {
+  const fetchJobsWithCounts = async (userId: string) => {
     try {
-      const { data, error } = await supabase
+      const { data: jobsData, error: jobsError } = await supabase
         .from("jobs")
         .select("*")
         .eq("employer_id", userId)
         .order("created_at", { ascending: false });
 
-      if (error) throw error;
-      setJobs(data || []);
+      if (jobsError) throw jobsError;
+
+      // Fetch application counts for each job
+      const jobsWithCounts = await Promise.all(
+        (jobsData || []).map(async (job) => {
+          const { count } = await supabase
+            .from("job_applications")
+            .select("*", { count: "exact", head: true })
+            .eq("job_id", job.id);
+          
+          return { ...job, applicationCount: count || 0 };
+        })
+      );
+
+      setJobs(jobsWithCounts);
     } catch (error: any) {
       if (import.meta.env.DEV) console.error("Error fetching jobs:", error);
       toast.error("Unable to load jobs");
     }
   };
 
-  const fetchApplications = async (userId: string) => {
+  const fetchApplicationsForJob = async (jobId: string) => {
     try {
-      // First get jobs for this employer
-      const { data: employerJobs } = await supabase
-        .from("jobs")
-        .select("id")
-        .eq("employer_id", userId);
-
-      if (!employerJobs || employerJobs.length === 0) {
-        setApplications([]);
-        return;
-      }
-
-      const jobIds = employerJobs.map(j => j.id);
-
       const { data, error } = await supabase
         .from("job_applications")
         .select("*")
-        .in("job_id", jobIds)
+        .eq("job_id", jobId)
         .order("created_at", { ascending: false });
 
       if (error) throw error;
 
-      // Fetch related data separately
+      // Fetch related data
       const applicationsWithDetails = await Promise.all(
         (data || []).map(async (app) => {
           const [profileData, jobData] = await Promise.all([
             supabase
               .from("profiles")
-              .select("full_name, email")
+              .select("full_name, email, skills")
               .eq("id", app.freelancer_id)
               .single(),
             supabase
@@ -139,31 +132,64 @@ const Dashboard = () => {
 
           return {
             ...app,
-            profiles: profileData.data || { full_name: null, email: "" },
+            profiles: profileData.data || { full_name: null, email: "", skills: [] },
             jobs: jobData.data || { title: "" }
           };
         })
       );
 
-      setApplications(applicationsWithDetails);
+      setJobApplications(applicationsWithDetails);
     } catch (error: any) {
       if (import.meta.env.DEV) console.error("Error fetching applications:", error);
+      toast.error("Unable to load applications");
     }
   };
 
-  const handleUpdateApplicationStatus = async (applicationId: string, newStatus: string) => {
+  const handleJobSelect = (job: Job) => {
+    setSelectedJob(job);
+    setSelectedApplication(null);
+    fetchApplicationsForJob(job.id);
+  };
+
+  const handleApplicationSelect = (application: Application) => {
+    setSelectedApplication(application);
+  };
+
+  const handleBackToJobs = () => {
+    setSelectedJob(null);
+    setSelectedApplication(null);
+    setJobApplications([]);
+  };
+
+  const handleBackToApplications = () => {
+    setSelectedApplication(null);
+  };
+
+  const handleUpdateApplicationStatus = async (
+    applicationId: string, 
+    newStatus: string, 
+    interviewData?: InterviewData
+  ) => {
     try {
-      const application = applications.find(app => app.id === applicationId);
+      const application = jobApplications.find(app => app.id === applicationId);
       if (!application) return;
+
+      // Update application status and interview data
+      const updateData: any = { status: newStatus };
+      if (interviewData) {
+        updateData.interview_date = interviewData.date;
+        updateData.interview_time = interviewData.time;
+        updateData.interview_notes = interviewData.notes;
+      }
 
       const { error: updateError } = await supabase
         .from("job_applications")
-        .update({ status: newStatus })
+        .update(updateData)
         .eq("id", applicationId);
 
       if (updateError) throw updateError;
 
-      // If accepting, update job status to 'in_progress' so it's removed from Find Work
+      // If accepting, update job status to 'in_progress'
       if (newStatus === "accepted") {
         const { error: jobUpdateError } = await supabase
           .from("jobs")
@@ -173,55 +199,73 @@ const Dashboard = () => {
         if (jobUpdateError) throw jobUpdateError;
       }
 
-      // Create notification for the freelancer
-      const { error: notificationError } = await supabase.from("notifications").insert({
+      // Create notification
+      const notificationTitle = interviewData 
+        ? "Interview Scheduled" 
+        : `Application ${newStatus}`;
+      
+      const notificationMessage = interviewData
+        ? `An interview has been scheduled for "${application.jobs.title}" on ${new Date(interviewData.date).toLocaleDateString()} at ${interviewData.time}.`
+        : `Your application for "${application.jobs.title}" has been ${newStatus}.`;
+
+      await supabase.from("notifications").insert({
         user_id: application.freelancer_id,
-        title: `Application ${newStatus}`,
-        message: `Your application for "${application.jobs.title}" has been ${newStatus}.`,
-        type: newStatus === "accepted" ? "success" : "error",
+        title: notificationTitle,
+        message: notificationMessage,
+        type: newStatus === "accepted" ? "success" : newStatus === "rejected" ? "error" : "info",
         related_application_id: applicationId,
       });
 
-      // Send email notification to freelancer
+      // Send email notification
       try {
-        await supabase.functions.invoke("send-application-email", {
-          body: {
-            freelancerEmail: application.profiles.email,
-            freelancerName: application.profiles.full_name || "Freelancer",
-            jobTitle: application.jobs.title,
-            status: newStatus,
-            employerName: profile?.full_name,
-          },
-        });
+        if (interviewData) {
+          await supabase.functions.invoke("send-interview-email", {
+            body: {
+              freelancerEmail: application.profiles.email,
+              freelancerName: application.profiles.full_name || "Freelancer",
+              jobTitle: application.jobs.title,
+              employerName: profile?.full_name || "The employer",
+              interviewDate: interviewData.date,
+              interviewTime: interviewData.time,
+              interviewNotes: interviewData.notes,
+            },
+          });
+        } else {
+          await supabase.functions.invoke("send-application-email", {
+            body: {
+              freelancerEmail: application.profiles.email,
+              freelancerName: application.profiles.full_name || "Freelancer",
+              jobTitle: application.jobs.title,
+              status: newStatus,
+              employerName: profile?.full_name,
+            },
+          });
+        }
       } catch (emailError) {
         if (import.meta.env.DEV) console.error("Email notification failed:", emailError);
-        // Don't block the main flow if email fails
       }
 
       // Update local state
-      setApplications(prev =>
-        prev.map(app =>
-          app.id === applicationId ? { ...app, status: newStatus } : app
-        )
+      const updatedApplications = jobApplications.map(app =>
+        app.id === applicationId 
+          ? { ...app, status: newStatus, ...updateData } 
+          : app
       );
+      setJobApplications(updatedApplications);
 
-      toast.success(`Application ${newStatus} successfully`);
+      // Update selected application if it's the one being modified
+      if (selectedApplication?.id === applicationId) {
+        setSelectedApplication({ ...selectedApplication, status: newStatus, ...updateData });
+      }
+
+      // Refresh job counts
+      if (user) {
+        fetchJobsWithCounts(user.id);
+      }
+
     } catch (error: any) {
       toast.error("Failed to update application");
-    }
-  };
-
-  const handleDownloadResume = async (resumeUrl: string) => {
-    try {
-      const { data, error } = await supabase.storage
-        .from('resumes')
-        .createSignedUrl(resumeUrl, 60);
-      
-      if (error) throw error;
-      
-      window.open(data.signedUrl, "_blank");
-    } catch (error: any) {
-      toast.error("Failed to open resume");
+      throw error;
     }
   };
 
@@ -246,7 +290,8 @@ const Dashboard = () => {
     <div className="min-h-screen bg-background flex flex-col">
       <Header />
       <main className="flex-1 container mx-auto px-6 py-24">
-        <div className="max-w-6xl mx-auto space-y-8">
+        <div className="max-w-7xl mx-auto space-y-8">
+          {/* Profile Header */}
           <Card>
             <CardHeader>
               <div className="flex items-start justify-between">
@@ -282,173 +327,67 @@ const Dashboard = () => {
             </CardContent>
           </Card>
 
-          <Tabs defaultValue="jobs" className="space-y-6">
-            <TabsList>
-              <TabsTrigger value="jobs">My Posted Jobs</TabsTrigger>
-              <TabsTrigger value="applications">
-                Applications ({applications.length})
-              </TabsTrigger>
-            </TabsList>
+          {/* Main Dashboard Content */}
+          <div className="grid lg:grid-cols-12 gap-6">
+            {/* Left Panel - Jobs List */}
+            <div className="lg:col-span-4">
+              <Card className="h-fit">
+                <CardHeader className="pb-3">
+                  <CardTitle className="text-lg">My Posted Jobs</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <JobsList 
+                    jobs={jobs} 
+                    onJobSelect={handleJobSelect}
+                    selectedJobId={selectedJob?.id}
+                  />
+                </CardContent>
+              </Card>
+            </div>
 
-            <TabsContent value="jobs" className="space-y-6">
-              <div className="flex items-center justify-between">
-                <h2 className="text-2xl font-bold">Posted Jobs</h2>
-                <Button onClick={() => navigate("/post-job")}>
-                  Post New Job
-                </Button>
-              </div>
-
-              {jobs.length === 0 ? (
+            {/* Right Panel - Applications */}
+            <div className="lg:col-span-8">
+              {!selectedJob ? (
                 <Card>
-                  <CardContent className="py-12 text-center">
-                    <Briefcase className="h-12 w-12 mx-auto mb-4 text-muted-foreground" />
-                    <p className="text-muted-foreground mb-4">You haven't posted any jobs yet</p>
-                    <Button onClick={() => navigate("/post-job")}>
-                      Post Your First Job
-                    </Button>
+                  <CardContent className="py-16 text-center">
+                    <p className="text-muted-foreground">
+                      Select a job from the left to view applications
+                    </p>
                   </CardContent>
                 </Card>
+              ) : selectedApplication ? (
+                <ApplicationDetails
+                  application={selectedApplication}
+                  employerName={profile?.full_name}
+                  onStatusUpdate={handleUpdateApplicationStatus}
+                  onBack={handleBackToApplications}
+                />
               ) : (
-                <div className="grid gap-4">
-                  {jobs.map((job) => (
-                    <Card key={job.id}>
-                      <CardHeader>
-                        <div className="flex items-start justify-between">
-                          <div>
-                            <CardTitle>{job.title}</CardTitle>
-                            <CardDescription className="mt-2">{job.description}</CardDescription>
-                          </div>
-                          <Badge>{job.status}</Badge>
-                        </div>
-                      </CardHeader>
-                      <CardContent>
-                        <div className="flex items-center gap-4 text-sm text-muted-foreground">
-                          {job.location && (
-                            <div className="flex items-center gap-1">
-                              <MapPin className="h-4 w-4" />
-                              <span>{job.location}</span>
-                            </div>
-                          )}
-                          <div className="flex items-center gap-1">
-                            <Calendar className="h-4 w-4" />
-                            <span>{new Date(job.created_at).toLocaleDateString()}</span>
-                          </div>
-                        </div>
-                      </CardContent>
-                    </Card>
-                  ))}
-                </div>
-              )}
-            </TabsContent>
-
-            <TabsContent value="applications" className="space-y-6">
-              <h2 className="text-2xl font-bold">Job Applications</h2>
-
-              {applications.length === 0 ? (
                 <Card>
-                  <CardContent className="py-12 text-center">
-                    <FileText className="h-12 w-12 mx-auto mb-4 text-muted-foreground" />
-                    <p className="text-muted-foreground">No applications received yet</p>
+                  <CardHeader>
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <CardTitle className="text-lg">{selectedJob.title}</CardTitle>
+                        <CardDescription>
+                          {jobApplications.length} application{jobApplications.length !== 1 ? "s" : ""}
+                        </CardDescription>
+                      </div>
+                      <Button variant="ghost" size="sm" onClick={handleBackToJobs}>
+                        ← Back
+                      </Button>
+                    </div>
+                  </CardHeader>
+                  <CardContent>
+                    <ApplicationsTabs
+                      applications={jobApplications}
+                      onApplicationSelect={handleApplicationSelect}
+                      selectedApplicationId={selectedApplication?.id}
+                    />
                   </CardContent>
                 </Card>
-              ) : (
-                <div className="grid gap-4">
-                  {applications.map((application) => (
-                    <Card key={application.id}>
-                      <CardHeader>
-                        <div className="flex items-start justify-between">
-                          <div className="space-y-1">
-                            <CardTitle className="text-lg">
-                              {application.profiles.full_name || "Applicant"}
-                            </CardTitle>
-                            <CardDescription>
-                              Applied for: {application.jobs.title}
-                            </CardDescription>
-                            <p className="text-sm text-muted-foreground">
-                              {application.profiles.email}
-                            </p>
-                            {application.phone_number && (
-                              <p className="text-sm text-muted-foreground">
-                                Phone: {application.phone_number}
-                              </p>
-                            )}
-                          </div>
-                          <Badge
-                            variant={
-                              application.status === "accepted"
-                                ? "default"
-                                : application.status === "rejected"
-                                ? "destructive"
-                                : "secondary"
-                            }
-                          >
-                            {application.status}
-                          </Badge>
-                        </div>
-                      </CardHeader>
-                      <CardContent className="space-y-4">
-                        <div>
-                          <p className="text-sm font-medium mb-2">Cover Letter</p>
-                          <p className="text-sm text-muted-foreground whitespace-pre-wrap">
-                            {application.cover_letter}
-                          </p>
-                        </div>
-
-                        {application.proposed_rate && (
-                          <div>
-                            <p className="text-sm font-medium">
-                              Proposed Rate: ${application.proposed_rate}/hr
-                            </p>
-                          </div>
-                        )}
-
-                        <div className="flex items-center gap-4 pt-4 border-t">
-                          <p className="text-xs text-muted-foreground">
-                            Applied {new Date(application.created_at).toLocaleDateString()}
-                          </p>
-                        </div>
-
-                        <div className="flex items-center gap-2 flex-wrap">
-                          {application.resume_url && (
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              onClick={() => handleDownloadResume(application.resume_url!)}
-                            >
-                              <Download className="h-4 w-4 mr-2" />
-                              View Resume
-                            </Button>
-                          )}
-                          
-                          {application.status === "pending" && (
-                            <>
-                              <Button
-                                size="sm"
-                                onClick={() =>
-                                  handleUpdateApplicationStatus(application.id, "accepted")
-                                }
-                              >
-                                Accept
-                              </Button>
-                              <Button
-                                size="sm"
-                                variant="destructive"
-                                onClick={() =>
-                                  handleUpdateApplicationStatus(application.id, "rejected")
-                                }
-                              >
-                                Reject
-                              </Button>
-                            </>
-                          )}
-                        </div>
-                      </CardContent>
-                    </Card>
-                  ))}
-                </div>
               )}
-            </TabsContent>
-          </Tabs>
+            </div>
+          </div>
         </div>
       </main>
       <Footer />

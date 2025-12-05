@@ -20,6 +20,9 @@ export type Database = {
           created_at: string
           freelancer_id: string
           id: string
+          interview_date: string | null
+          interview_notes: string | null
+          interview_time: string | null
           job_id: string
           phone_number: string | null
           proposed_rate: number | null
@@ -31,6 +34,9 @@ export type Database = {
           created_at?: string
           freelancer_id: string
           id?: string
+          interview_date?: string | null
+          interview_notes?: string | null
+          interview_time?: string | null
           job_id: string
           phone_number?: string | null
           proposed_rate?: number | null
@@ -42,6 +48,9 @@ export type Database = {
           created_at?: string
           freelancer_id?: string
           id?: string
+          interview_date?: string | null
+          interview_notes?: string | null
+          interview_time?: string | null
           job_id?: string
           phone_number?: string | null
           proposed_rate?: number | null
