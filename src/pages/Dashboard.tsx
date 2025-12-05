@@ -45,6 +45,57 @@ const Dashboard = () => {
     checkAuth();
   }, []);
 
+  // Real-time subscription for job applications
+  useEffect(() => {
+    if (!selectedJob) return;
+
+    const channel = supabase
+      .channel('job-applications-changes')
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'job_applications',
+          filter: `job_id=eq.${selectedJob.id}`,
+        },
+        () => {
+          // Refetch applications when any change occurs
+          fetchApplicationsForJob(selectedJob.id);
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [selectedJob?.id]);
+
+  // Real-time subscription for all applications (for job counts)
+  useEffect(() => {
+    if (!user) return;
+
+    const channel = supabase
+      .channel('all-applications-changes')
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'job_applications',
+        },
+        () => {
+          // Refetch job counts when any application changes
+          fetchJobsWithCounts(user.id);
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [user?.id]);
+
   const checkAuth = async () => {
     const { data: { session } } = await supabase.auth.getSession();
     
