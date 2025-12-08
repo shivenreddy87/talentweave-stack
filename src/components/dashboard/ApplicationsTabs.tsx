@@ -2,7 +2,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
-import { FileText, Clock, CheckCircle, Star } from "lucide-react";
+import { FileText, Clock, CheckCircle, Star, XCircle } from "lucide-react";
 
 export interface Application {
   id: string;
@@ -37,6 +37,7 @@ const ApplicationsTabs = ({ applications, onApplicationSelect, selectedApplicati
   const appliedApplications = applications.filter(a => a.status === "pending");
   const shortlistedApplications = applications.filter(a => a.status === "shortlisted");
   const acceptedApplications = applications.filter(a => a.status === "accepted");
+  const rejectedApplications = applications.filter(a => a.status === "rejected");
 
   const renderApplicationCard = (application: Application) => (
     <Card
@@ -95,7 +96,7 @@ const ApplicationsTabs = ({ applications, onApplicationSelect, selectedApplicati
 
   return (
     <Tabs defaultValue="applied" className="w-full">
-      <TabsList className="grid w-full grid-cols-3">
+      <TabsList className="grid w-full grid-cols-4">
         <TabsTrigger value="applied" className="text-xs sm:text-sm">
           <Clock className="h-3 w-3 mr-1 hidden sm:inline" />
           Applied ({appliedApplications.length})
@@ -107,6 +108,10 @@ const ApplicationsTabs = ({ applications, onApplicationSelect, selectedApplicati
         <TabsTrigger value="accepted" className="text-xs sm:text-sm">
           <CheckCircle className="h-3 w-3 mr-1 hidden sm:inline" />
           Accepted ({acceptedApplications.length})
+        </TabsTrigger>
+        <TabsTrigger value="rejected" className="text-xs sm:text-sm">
+          <XCircle className="h-3 w-3 mr-1 hidden sm:inline" />
+          Rejected ({rejectedApplications.length})
         </TabsTrigger>
       </TabsList>
 
@@ -131,6 +136,14 @@ const ApplicationsTabs = ({ applications, onApplicationSelect, selectedApplicati
           renderEmptyState("No accepted candidates", <CheckCircle className="h-8 w-8 mx-auto mb-2 text-muted-foreground" />)
         ) : (
           acceptedApplications.map(renderApplicationCard)
+        )}
+      </TabsContent>
+
+      <TabsContent value="rejected" className="mt-4 space-y-3">
+        {rejectedApplications.length === 0 ? (
+          renderEmptyState("No rejected candidates", <XCircle className="h-8 w-8 mx-auto mb-2 text-muted-foreground" />)
+        ) : (
+          rejectedApplications.map(renderApplicationCard)
         )}
       </TabsContent>
     </Tabs>
