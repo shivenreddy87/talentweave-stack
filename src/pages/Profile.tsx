@@ -1,28 +1,55 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { z } from "zod";
 import { supabase } from "@/integrations/supabase/client";
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { toast } from "sonner";
-import { Loader2, Upload } from "lucide-react";
+import { Loader2 } from "lucide-react";
+import {
+  Form,
+  FormControl,
+  FormField,
+  FormItem,
+  FormLabel,
+  FormMessage,
+} from "@/components/ui/form";
+
+const profileSchema = z.object({
+  full_name: z.string().trim().max(100, "Name must be less than 100 characters").optional().or(z.literal("")),
+  bio: z.string().trim().max(2000, "Bio must be less than 2000 characters").optional().or(z.literal("")),
+  location: z.string().trim().max(200, "Location must be less than 200 characters").optional().or(z.literal("")),
+  hourly_rate: z.string().optional().or(z.literal("")).refine(
+    (val) => !val || (!isNaN(parseFloat(val)) && parseFloat(val) >= 0 && parseFloat(val) <= 10000),
+    "Rate must be between 0 and 10000"
+  ),
+  skills: z.string().max(500, "Skills must be less than 500 characters").optional().or(z.literal("")),
+});
+
+type ProfileFormValues = z.infer<typeof profileSchema>;
 
 const Profile = () => {
   const navigate = useNavigate();
   const [user, setUser] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-  const [formData, setFormData] = useState({
-    full_name: "",
-    bio: "",
-    location: "",
-    hourly_rate: "",
-    skills: "",
+
+  const form = useForm<ProfileFormValues>({
+    resolver: zodResolver(profileSchema),
+    defaultValues: {
+      full_name: "",
+      bio: "",
+      location: "",
+      hourly_rate: "",
+      skills: "",
+    },
   });
 
   useEffect(() => {
@@ -53,7 +80,7 @@ const Profile = () => {
       if (error) throw error;
 
       if (data) {
-        setFormData({
+        form.reset({
           full_name: data.full_name || "",
           bio: data.bio || "",
           location: data.location || "",
@@ -67,31 +94,26 @@ const Profile = () => {
     }
   };
 
-  const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
-    setFormData({
-      ...formData,
-      [e.target.name]: e.target.value,
-    });
-  };
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const onSubmit = async (values: ProfileFormValues) => {
     setSaving(true);
 
     try {
-      const skillsArray = formData.skills
-        .split(",")
-        .map(skill => skill.trim())
-        .filter(skill => skill.length > 0);
+      const skillsArray = values.skills
+        ? values.skills
+            .split(",")
+            .map(skill => skill.trim())
+            .filter(skill => skill.length > 0)
+            .slice(0, 50) // Limit to 50 skills
+        : [];
 
       const { error } = await supabase
         .from("profiles")
         .update({
-          full_name: formData.full_name,
-          bio: formData.bio,
-          location: formData.location,
-          hourly_rate: formData.hourly_rate ? parseFloat(formData.hourly_rate) : null,
-          skills: skillsArray,
+          full_name: values.full_name || null,
+          bio: values.bio || null,
+          location: values.location || null,
+          hourly_rate: values.hourly_rate ? parseFloat(values.hourly_rate) : null,
+          skills: skillsArray.length > 0 ? skillsArray : null,
         })
         .eq("id", user.id);
 
@@ -127,7 +149,7 @@ const Profile = () => {
               <div className="flex items-center gap-4 mb-4">
                 <Avatar className="h-20 w-20">
                   <AvatarFallback className="text-3xl">
-                    {formData.full_name?.[0] || user?.email?.[0] || "U"}
+                    {form.watch("full_name")?.[0] || user?.email?.[0] || "U"}
                   </AvatarFallback>
                 </Avatar>
                 <div className="flex-1">
@@ -137,89 +159,113 @@ const Profile = () => {
               </div>
             </CardHeader>
             <CardContent>
-              <form onSubmit={handleSubmit} className="space-y-6">
-                <div className="space-y-2">
-                  <Label htmlFor="full_name">Full Name</Label>
-                  <Input
-                    id="full_name"
+              <Form {...form}>
+                <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
+                  <FormField
+                    control={form.control}
                     name="full_name"
-                    value={formData.full_name}
-                    onChange={handleChange}
-                    placeholder="John Doe"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Full Name</FormLabel>
+                        <FormControl>
+                          <Input placeholder="John Doe" {...field} />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
                   />
-                </div>
 
-                <div className="space-y-2">
-                  <Label htmlFor="email">Email</Label>
-                  <Input
-                    id="email"
-                    value={user?.email || ""}
-                    disabled
-                    className="bg-muted"
-                  />
-                </div>
+                  <div className="space-y-2">
+                    <FormLabel>Email</FormLabel>
+                    <Input
+                      value={user?.email || ""}
+                      disabled
+                      className="bg-muted"
+                    />
+                  </div>
 
-                <div className="space-y-2">
-                  <Label htmlFor="bio">Bio</Label>
-                  <Textarea
-                    id="bio"
+                  <FormField
+                    control={form.control}
                     name="bio"
-                    value={formData.bio}
-                    onChange={handleChange}
-                    placeholder="Tell us about yourself..."
-                    rows={4}
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Bio</FormLabel>
+                        <FormControl>
+                          <Textarea
+                            placeholder="Tell us about yourself..."
+                            rows={4}
+                            {...field}
+                          />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
                   />
-                </div>
 
-                <div className="space-y-2">
-                  <Label htmlFor="location">Location</Label>
-                  <Input
-                    id="location"
+                  <FormField
+                    control={form.control}
                     name="location"
-                    value={formData.location}
-                    onChange={handleChange}
-                    placeholder="San Francisco, CA"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Location</FormLabel>
+                        <FormControl>
+                          <Input placeholder="San Francisco, CA" {...field} />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
                   />
-                </div>
 
-                <div className="space-y-2">
-                  <Label htmlFor="hourly_rate">Hourly Rate ($)</Label>
-                  <Input
-                    id="hourly_rate"
+                  <FormField
+                    control={form.control}
                     name="hourly_rate"
-                    type="number"
-                    step="0.01"
-                    value={formData.hourly_rate}
-                    onChange={handleChange}
-                    placeholder="50.00"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Hourly Rate ($)</FormLabel>
+                        <FormControl>
+                          <Input
+                            type="number"
+                            step="0.01"
+                            min="0"
+                            max="10000"
+                            placeholder="50.00"
+                            {...field}
+                          />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
                   />
-                </div>
 
-                <div className="space-y-2">
-                  <Label htmlFor="skills">Skills (comma-separated)</Label>
-                  <Input
-                    id="skills"
+                  <FormField
+                    control={form.control}
                     name="skills"
-                    value={formData.skills}
-                    onChange={handleChange}
-                    placeholder="React, Node.js, TypeScript"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Skills (comma-separated)</FormLabel>
+                        <FormControl>
+                          <Input placeholder="React, Node.js, TypeScript" {...field} />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
                   />
-                </div>
 
-                <div className="flex gap-4">
-                  <Button type="submit" disabled={saving}>
-                    {saving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                    Save Changes
-                  </Button>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    onClick={() => navigate("/dashboard")}
-                  >
-                    Cancel
-                  </Button>
-                </div>
-              </form>
+                  <div className="flex gap-4">
+                    <Button type="submit" disabled={saving}>
+                      {saving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                      Save Changes
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={() => navigate("/dashboard")}
+                    >
+                      Cancel
+                    </Button>
+                  </div>
+                </form>
+              </Form>
             </CardContent>
           </Card>
         </div>
